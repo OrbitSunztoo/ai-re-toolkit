@@ -1,0 +1,44 @@
+{
+  "category": "javascript",
+  "description": "JavaScript deobfuscation and analysis tools",
+  "tools": [
+    {
+      "name": "js_deobfuscate",
+      "display_name": "JS Deobfuscator",
+      "description": "Deobfuscate obfuscated JavaScript",
+      "executable": {
+        "windows": "node",
+        "linux": "node"
+      },
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true
+        }
+      ],
+      "command_template": "{executable} tools/scripts/js_deobfuscator.js {file}",
+      "output_type": "text",
+      "timeout": 120
+    },
+    {
+      "name": "prettier",
+      "display_name": "Prettier",
+      "description": "Format and beautify JS code",
+      "executable": {
+        "windows": "npx",
+        "linux": "npx"
+      },
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true
+        }
+      ],
+      "command_template": "{executable} prettier --write {file}",
+      "output_type": "text",
+      "timeout": 60
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "app": {
+    "name": "AI-RE Toolkit",
+    "version": "0.1.0",
+    "debug": false,
+    "max_log_lines": 5000
+  },
+  "ai": {
+    "default_provider": "custom",
+    "max_retries": 3,
+    "timeout": 120,
+    "providers": {
+      "custom": {
+        "base_url": "https://api.deepseek.com/v1",
+        "api_key": "YOUR_API_KEY_HERE",
+        "model": "deepseek-chat"
+      }
+    }
+  },
+  "tools": {
+    "timeout": 300,
+    "max_output_size": 1048576,
+    "cache_enabled": true,
+    "cache_dir": "./cache"
+  },
+  "gui": {
+    "theme": "dark",
+    "font_family": "Consolas",
+    "font_size": 12,
+    "code_theme": "monokai"
+  }
+}

@@ -1,0 +1,14 @@
+PySide6>=6.6.0
+requests>=2.31.0
+aiohttp>=3.9.0
+pyyaml>=6.0.1
+pydantic>=2.5.0
+pygments>=2.17.0
+python-magic>=0.4.27; sys_platform == "linux"
+python-magic-bin>=0.4.14; sys_platform == "win32"
+pyinstaller>=6.3.0
+
+# 逆向分析库（Python原生方案，无需下载外部工具）
+pefile>=2023.2.7          # PE文件解析
+pyaxmlparser>=0.3.31      # APK/DEX解析（替代jadx）
+androguard>=3.4.0         # Android逆向（可选）

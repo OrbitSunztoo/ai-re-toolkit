@@ -1,0 +1,101 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Project specific
+cache/
+output/
+logs/
+*.log
+
+# Large external tools (keep source only)
+tools/windows/ghidra_12.1.2_PUBLIC/
+tools/windows/die/
+tools/windows/apktool/
+tools/windows/jadx/
+
+# Keep tool definitions only
+!tools/windows/
+tools/windows/*/
+!tools/windows/**/*.json
+!tools/windows/**/db_custom/
+!tools/windows/**/db/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Config with secrets (create a template instead)
+config/app_config.json
+!config/app_config.json.example
+
+# Temp files
+*.tmp
+*.bak
+*.orig
+
+# PyInstaller
+*.manifest
+*.spec.bak
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.whl
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version

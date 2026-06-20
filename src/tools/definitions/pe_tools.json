@@ -1,0 +1,115 @@
+{
+  "category": "pe_windows",
+  "description": "Windows PE/EXE/DLL analysis tools",
+  "tools": [
+    {
+      "name": "detect_it_easy",
+      "display_name": "Detect It Easy",
+      "description": "Identify packers, compilers, protectors and cryptors in PE files",
+      "executable": {
+        "windows": "tools/windows/die/diec.exe",
+        "linux": "tools/linux/die/diec"
+      },
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true,
+          "description": "Target PE file path"
+        }
+      ],
+      "command_template": "{executable} -j {file}",
+      "output_type": "json",
+      "timeout": 60
+    },
+    {
+      "name": "upx",
+      "display_name": "UPX Unpacker",
+      "description": "Unpack UPX-compressed executables",
+      "executable": {
+        "windows": "tools/windows/upx/upx.exe",
+        "linux": "tools/linux/upx/upx"
+      },
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true,
+          "description": "Packed file"
+        },
+        {
+          "name": "output",
+          "type": "path",
+          "required": false,
+          "description": "Output path (optional)"
+        }
+      ],
+      "command_template": "{executable} -d -o {output} {file}",
+      "output_type": "text",
+      "timeout": 120
+    },
+    {
+      "name": "ghidra_analyze",
+      "display_name": "Ghidra Headless",
+      "description": "Automated decompilation and pseudocode generation",
+      "executable": {
+        "windows": "tools/windows/ghidra_12.1.2_PUBLIC/support/analyzeHeadless.bat",
+        "linux": "tools/linux/ghidra/support/analyzeHeadless"
+      },
+      "params": [
+        {
+          "name": "project_dir",
+          "type": "path",
+          "required": true,
+          "description": "Ghidra project directory"
+        },
+        {
+          "name": "project_name",
+          "type": "string",
+          "required": true,
+          "description": "Project name"
+        },
+        {
+          "name": "file",
+          "type": "path",
+          "required": true,
+          "description": "File to analyze"
+        },
+        {
+          "name": "function",
+          "type": "string",
+          "required": false,
+          "description": "Specific function to decompile"
+        }
+      ],
+      "command_template": "{executable} {project_dir} {project_name} -import {file} -postScript DecompileFunction.java {function}",
+      "output_type": "text",
+      "timeout": 300
+    },
+    {
+      "name": "strings",
+      "display_name": "Strings Extractor",
+      "description": "Extract printable strings from binary",
+      "executable": {
+        "windows": "tools/windows/Strings/strings.exe",
+        "linux": "strings"
+      },
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true
+        },
+        {
+          "name": "min_length",
+          "type": "int",
+          "required": false,
+          "default": 4
+        }
+      ],
+      "command_template": "{executable} -n {min_length} {file}",
+      "output_type": "text",
+      "timeout": 60
+    }
+  ]
+}

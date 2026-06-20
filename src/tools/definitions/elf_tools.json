@@ -1,0 +1,83 @@
+{
+  "category": "elf_linux",
+  "description": "Linux ELF analysis tools",
+  "tools": [
+    {
+      "name": "readelf",
+      "display_name": "readelf",
+      "description": "Display ELF file information",
+      "executable": {
+        "windows": null,
+        "linux": "readelf"
+      },
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true
+        },
+        {
+          "name": "option",
+          "type": "choice",
+          "choices": ["header", "sections", "symbols", "dynamic", "relocs"],
+          "required": false,
+          "default": "header"
+        }
+      ],
+      "command_template": "{executable} -{option} {file}",
+      "output_type": "text",
+      "timeout": 60
+    },
+    {
+      "name": "objdump",
+      "display_name": "objdump",
+      "description": "Disassembly and object file analysis",
+      "executable": {
+        "windows": null,
+        "linux": "objdump"
+      },
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true
+        },
+        {
+          "name": "option",
+          "type": "choice",
+          "choices": ["disassemble", "headers", "full-contents"],
+          "required": false,
+          "default": "disassemble"
+        }
+      ],
+      "command_template": "{executable} -d {file}",
+      "output_type": "text",
+      "timeout": 120
+    },
+    {
+      "name": "radare2",
+      "display_name": "radare2",
+      "description": "Advanced reverse engineering framework",
+      "executable": {
+        "windows": "tools/windows/r2/radare2.exe",
+        "linux": "r2"
+      },
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true
+        },
+        {
+          "name": "cmd",
+          "type": "string",
+          "required": false,
+          "default": "aaa; afl; pdf @ main"
+        }
+      ],
+      "command_template": "{executable} -q -c '{cmd}' {file}",
+      "output_type": "text",
+      "timeout": 300
+    }
+  ]
+}

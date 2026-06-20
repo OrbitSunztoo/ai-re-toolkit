@@ -1,0 +1,75 @@
+{
+  "category": "apk_android",
+  "description": "Android APK/DEX analysis tools",
+  "tools": [
+    {
+      "name": "jadx",
+      "display_name": "JADX Decompiler",
+      "description": "Dex to Java decompiler",
+      "executable": {
+        "windows": "tools/windows/jadx/jadx.bat",
+        "linux": "tools/linux/jadx/bin/jadx"
+      },
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true
+        },
+        {
+          "name": "output_dir",
+          "type": "path",
+          "required": false,
+          "default": "./output"
+        }
+      ],
+      "command_template": "{executable} -d {output_dir} {file}",
+      "output_type": "text",
+      "timeout": 300
+    },
+    {
+      "name": "apktool",
+      "display_name": "Apktool",
+      "description": "APK disassembler and rebuilder",
+      "executable": {
+        "windows": "tools/windows/apktool/apktool.bat",
+        "linux": "tools/linux/apktool/apktool"
+      },
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true
+        },
+        {
+          "name": "output_dir",
+          "type": "path",
+          "required": false,
+          "default": "./output"
+        }
+      ],
+      "command_template": "{executable} d -o {output_dir} -f {file}",
+      "output_type": "text",
+      "timeout": 180
+    },
+    {
+      "name": "dexdump",
+      "display_name": "dexdump",
+      "description": "Android DEX file dump",
+      "executable": {
+        "windows": null,
+        "linux": "dexdump"
+      },
+      "params": [
+        {
+          "name": "file",
+          "type": "path",
+          "required": true
+        }
+      ],
+      "command_template": "{executable} -d {file}",
+      "output_type": "text",
+      "timeout": 60
+    }
+  ]
+}

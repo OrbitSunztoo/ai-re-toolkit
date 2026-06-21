@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QThread, QSize
 from PySide6.QtGui import QFont, QTextCursor, QColor, QTextCharFormat
+from src.utils.i18n import t, translator
 
 
 class ChatMessageWidget(QWidget):
@@ -23,7 +24,7 @@ class ChatMessageWidget(QWidget):
         layout.setContentsMargins(8, 4, 8, 4)
 
         # 标签
-        label = QLabel("你" if self.is_user else "AI")
+        label = QLabel(t("ai_chat.user") if self.is_user else t("ai_chat.ai"))
         label.setStyleSheet(f"""
             color: {'#4a9eff' if self.is_user else '#4caf50'};
             font-weight: bold;
@@ -65,6 +66,14 @@ class AIChatPanel(QWidget):
         self.worker = None
         self._setup_ui()
 
+    def update_texts(self):
+        """更新所有文本（语言切换时调用）"""
+        self.title.setText(t("ai_chat.title"))
+        self.btn_clear.setText(t("ai_chat.clear"))
+        self.hint.setText(t("ai_chat.hint"))
+        self.input_box.setPlaceholderText(t("ai_chat.input_hint"))
+        self.btn_send.setText(t("ai_chat.send"))
+
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -75,13 +84,13 @@ class AIChatPanel(QWidget):
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(8, 4, 8, 4)
 
-        title = QLabel("AI 指令控制台")
-        title.setStyleSheet("font-weight: bold; font-size: 14px; color: #4a9eff;")
+        self.title = QLabel(t("ai_chat.title"))
+        self.title.setStyleSheet("font-weight: bold; font-size: 14px; color: #4a9eff;")
 
-        header_layout.addWidget(title)
+        header_layout.addWidget(self.title)
         header_layout.addStretch()
 
-        self.btn_clear = QPushButton("清空")
+        self.btn_clear = QPushButton(t("ai_chat.clear"))
         self.btn_clear.setStyleSheet("""
             QPushButton {
                 background: #444;
@@ -119,9 +128,9 @@ class AIChatPanel(QWidget):
         layout.addWidget(self.chat_area)
 
         # 快捷指令提示
-        hint = QLabel("💡 示例: '分析这个文件' | '帮我修改APK的包名' | '脱壳这个EXE'")
-        hint.setStyleSheet("color: #888; font-size: 11px; padding: 4px;")
-        layout.addWidget(hint)
+        self.hint = QLabel(t("ai_chat.hint"))
+        self.hint.setStyleSheet("color: #888; font-size: 11px; padding: 4px;")
+        layout.addWidget(self.hint)
 
         # 输入区域
         input_widget = QWidget()
@@ -130,7 +139,7 @@ class AIChatPanel(QWidget):
         input_layout.setSpacing(8)
 
         self.input_box = QLineEdit()
-        self.input_box.setPlaceholderText("输入指令，让AI执行操作...")
+        self.input_box.setPlaceholderText(t("ai_chat.input_hint"))
         self.input_box.setStyleSheet("""
             QLineEdit {
                 background: #2a2a2a;
@@ -151,7 +160,7 @@ class AIChatPanel(QWidget):
         self.input_box.returnPressed.connect(self._send_message)
         input_layout.addWidget(self.input_box)
 
-        self.btn_send = QPushButton("发送")
+        self.btn_send = QPushButton(t("ai_chat.send"))
         self.btn_send.setStyleSheet("""
             QPushButton {
                 background: #4a9eff;
@@ -198,7 +207,7 @@ class AIChatPanel(QWidget):
         self._set_loading(True)
 
         # 添加AI等待消息
-        self._add_message("AI正在分析中，请稍候...", is_user=False)
+        self._add_message(t("ai_chat.waiting"), is_user=False)
 
     def _on_response(self, response: str, user_message: str):
         """处理 AI 响应"""
@@ -216,7 +225,7 @@ class AIChatPanel(QWidget):
     def _on_error(self, error: str):
         """处理错误"""
         self._set_loading(False)
-        self._add_message(f"❌ 错误: {error}", is_user=False)
+        self._add_message(f"❌ {t('messages.error')}: {error}", is_user=False)
         self.worker = None
 
     def _add_message(self, text: str, is_user: bool):
@@ -234,9 +243,9 @@ class AIChatPanel(QWidget):
         self.input_box.setDisabled(loading)
         self.btn_send.setDisabled(loading)
         if loading:
-            self.btn_send.setText("思考中...")
+            self.btn_send.setText(t("ai_chat.thinking"))
         else:
-            self.btn_send.setText("发送")
+            self.btn_send.setText(t("ai_chat.send"))
 
     def _clear_chat(self):
         """清空对话"""
@@ -247,7 +256,7 @@ class AIChatPanel(QWidget):
                 item.widget().deleteLater()
 
         self.messages.clear()
-        self._add_message("对话已清空。你可以继续输入新指令。", is_user=False)
+        self._add_message(t("ai_chat.cleared"), is_user=False)
 
     def get_conversation_history(self) -> str:
         """获取对话历史"""

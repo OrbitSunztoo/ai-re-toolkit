@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QDialog, QLabel
 )
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QActionGroup
 
 from .file_panel import FilePanel
 from .log_panel import LogPanel
@@ -23,6 +23,7 @@ from src.core.file_analyzer import analyze_file
 from src.ai.scheduler import AIScheduler, ProviderFactory, AnalysisSession
 from src.tools.executor import ToolExecutor
 from src.tools.registry import ToolRegistry
+from src.utils.i18n import translator, t
 
 
 class AnalysisWorker(QThread):
@@ -56,7 +57,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("AI-RE Toolkit v0.1.0")
+        self.setWindowTitle(t("app.title"))
         self.setMinimumSize(1400, 900)
 
         self.config = self._load_config()
@@ -67,18 +68,54 @@ class MainWindow(QMainWindow):
 
         self.worker: AnalysisWorker = None
 
+        # 注册语言变更回调
+        translator.register_change_callback(self._on_language_changed)
+
         self._setup_ui()
         self._setup_menu()
         self._setup_statusbar()
         self._apply_theme()
 
         log.set_gui_callback(self._on_log)
-        log.info("AI-RE Toolkit 已启动")
+        log.info("AI-RE Toolkit " + t("status.started"))
+
+    def _on_language_changed(self, lang_code: str):
+        """语言切换回调"""
+        self.setWindowTitle(t("app.title"))
+        self._update_ui_texts()
+
+    def _update_ui_texts(self):
+        """更新所有UI文本"""
+        # 更新菜单
+        self._rebuild_menu()
+
+        # 更新状态栏
+        self.statusbar.showMessage(t("status.ready"))
+        if self.scheduler:
+            self.lbl_ai_status.setText(t("status.ai_connected").format(name=self.scheduler.provider.name))
+        else:
+            self.lbl_ai_status.setText(t("status.ai_not_connected"))
+
+        # 更新子面板
+        self.file_panel.update_texts()
+        self.log_panel.update_texts()
+        self.code_viewer.update_texts()
+        self.ai_chat.update_texts()
+
+    def _rebuild_menu(self):
+        """重建菜单"""
+        self.menuBar().clear()
+        self._setup_menu()
 
     def _load_config(self) -> dict:
         try:
             with open("config/app_config.json", "r", encoding="utf-8") as f:
-                return json.load(f)
+                config = json.load(f)
+                # 恢复保存的语言设置
+                saved_lang = config.get("language")
+                if saved_lang and saved_lang in translator.get_available_languages():
+                    translator.set_language(saved_lang)
+                return config
         except Exception:
             return {}
 
@@ -87,7 +124,7 @@ class MainWindow(QMainWindow):
             with open("config/app_config.json", "w", encoding="utf-8") as f:
                 json.dump(self.config, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            log.error(f"保存配置失败: {e}")
+            log.error(f"{t('messages.config_save_failed')}: {e}")
 
     def _init_scheduler(self):
         try:
@@ -101,9 +138,9 @@ class MainWindow(QMainWindow):
                 lambda name, params: self.tool_executor.execute(name, params)
             )
             self.scheduler.register_progress_callback(self._on_ai_progress)
-            log.info(f"AI调度器已初始化: {provider_name}")
+            log.info(f"{t('messages.scheduler_init_success')}: {provider_name}")
         except Exception as e:
-            log.error(f"AI调度器初始化失败: {e}")
+            log.error(f"{t('messages.scheduler_init_failed')}: {e}")
             self.scheduler = None
 
     def _setup_ui(self):
@@ -143,40 +180,63 @@ class MainWindow(QMainWindow):
     def _setup_menu(self):
         menubar = self.menuBar()
 
-        file_menu = menubar.addMenu("文件")
-        open_action = QAction("打开文件", self)
+        file_menu = menubar.addMenu(t("menu.file"))
+        open_action = QAction(t("menu.open_file"), self)
         open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self.file_panel._on_select_file)
         file_menu.addAction(open_action)
         file_menu.addSeparator()
-        exit_action = QAction("退出", self)
+        exit_action = QAction(t("menu.exit"), self)
         exit_action.setShortcut("Alt+F4")
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
-        tools_menu = menubar.addMenu("工具")
-        clear_cache = QAction("清除缓存", self)
+        tools_menu = menubar.addMenu(t("menu.tools"))
+        clear_cache = QAction(t("menu.clear_cache"), self)
         clear_cache.triggered.connect(self._clear_cache)
         tools_menu.addAction(clear_cache)
 
-        settings_menu = menubar.addMenu("设置")
-        ai_settings = QAction("AI配置", self)
+        settings_menu = menubar.addMenu(t("menu.settings"))
+        ai_settings = QAction(t("menu.ai_config"), self)
         ai_settings.triggered.connect(self._show_settings)
         settings_menu.addAction(ai_settings)
 
-        help_menu = menubar.addMenu("帮助")
-        about_action = QAction("关于", self)
+        # 语言子菜单
+        lang_menu = QMenu(t("menu.language"), self)
+        settings_menu.addMenu(lang_menu)
+
+        lang_group = QActionGroup(self)
+        for lang_code, lang_name in [
+            ("zh_CN", t("language.chinese")),
+            ("en_US", t("language.english"))
+        ]:
+            lang_action = QAction(lang_name, self)
+            lang_action.setCheckable(True)
+            lang_action.setChecked(translator.current_language == lang_code)
+            lang_action.triggered.connect(lambda checked, code=lang_code: self._switch_language(code))
+            lang_group.addAction(lang_action)
+            lang_menu.addAction(lang_action)
+
+        help_menu = menubar.addMenu(t("menu.help"))
+        about_action = QAction(t("menu.about"), self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
+
+    def _switch_language(self, lang_code: str):
+        """切换语言"""
+        if translator.set_language(lang_code):
+            # 保存语言偏好
+            self.config["language"] = lang_code
+            self._save_config()
 
     def _setup_statusbar(self):
         self.statusbar = QStatusBar()
         self.setStatusBar(self.statusbar)
-        self.statusbar.showMessage("就绪")
-        self.lbl_ai_status = QLabel("AI: 未连接")
+        self.statusbar.showMessage(t("status.ready"))
+        self.lbl_ai_status = QLabel(t("status.ai_not_connected"))
         self.statusbar.addPermanentWidget(self.lbl_ai_status)
         if self.scheduler:
-            self.lbl_ai_status.setText(f"AI: {self.scheduler.provider.name}")
+            self.lbl_ai_status.setText(t("status.ai_connected").format(name=self.scheduler.provider.name))
 
     def _apply_theme(self):
         self.setStyleSheet("""
@@ -191,53 +251,56 @@ class MainWindow(QMainWindow):
         """)
 
     def _on_file_loaded(self, path: str, info: dict):
-        log.info(f"加载文件: {path}")
-        log.info(f"文件类型: {info.get('type_name')}")
+        log.info(f"{t('messages.file_loaded')}: {path}")
+        log.info(f"{t('messages.file_type')}: {info.get('type_name')}")
+
+        ctx = t("context")
+        is_packed = info.get('is_packed')
 
         preview = f"""/*
- * 文件: {os.path.basename(path)}
- * 类型: {info.get('type_name', 'unknown')}
- * 大小: {info.get('size', 0)} bytes
- * 架构: {info.get('arch', 'N/A')}
- * 加壳: {'是' if info.get('is_packed') else '否'}
- * 魔数: {info.get('magic', 'N/A')[:32]}...
+ * {ctx['file']}: {os.path.basename(path)}
+ * {ctx['type']}: {info.get('type_name', 'unknown')}
+ * {ctx['size']}: {info.get('size', 0)} bytes
+ * {ctx['architecture']}: {info.get('arch', 'N/A')}
+ * {ctx['packed']}: {ctx['yes'] if is_packed else ctx['no']}
+ * {ctx['magic']}: {info.get('magic', 'N/A')[:32]}...
  */
 """
         self.code_viewer.set_code(preview)
 
-        context = f"""当前分析文件:
-- 路径: {path}
-- 类型: {info.get('type_name', 'unknown')}
-- 大小: {info.get('size', 0)} bytes
-- 架构: {info.get('arch', 'N/A')}
-- 加壳: {'是' if info.get('is_packed') else '否'}
-- 建议工具: {', '.join(info.get('suggested_tools', []))}
+        context = f"""{t('messages.analysis_required')}:
+- {ctx['path']}: {path}
+- {ctx['type']}: {info.get('type_name', 'unknown')}
+- {ctx['size']}: {info.get('size', 0)} bytes
+- {ctx['architecture']}: {info.get('arch', 'N/A')}
+- {ctx['packed']}: {ctx['yes'] if is_packed else ctx['no']}
+- {ctx['suggested_tools']}: {', '.join(info.get('suggested_tools', []))}
 
-可用工具:
-- Windows: pefile_analyze, detect_it_easy, upx, ghidra_analyze, strings
-- Android: apk_analyze, jadx, apktool, read_file
-- iOS: ipa_analyze, strings
+{ctx['available_tools']}:
+- {ctx['windows_tools']}: pefile_analyze, detect_it_easy, upx, ghidra_analyze, strings
+- {ctx['android_tools']}: apk_analyze, jadx, apktool, read_file
+- {ctx['ios_tools']}: ipa_analyze, strings
 
-支持操作: 分析、反编译、脱壳、修改文件、重打包APK
+{ctx['supported_ops']}: {ctx['op_analyze']}, {ctx['op_decompile']}, {ctx['op_unpack']}, {ctx['op_modify']}, {ctx['op_repack']}
 """
         self.ai_chat.set_context(context)
 
     def _start_analysis(self):
         if not self.scheduler:
-            QMessageBox.warning(self, "错误", "AI调度器未初始化")
+            QMessageBox.warning(self, t("messages.error"), t("messages.ai_not_init"))
             return
 
         file_path = self.file_panel.current_file
         file_info = self.file_panel.file_info
 
         if not file_path or not file_info:
-            QMessageBox.warning(self, "错误", "请先选择文件")
+            QMessageBox.warning(self, t("messages.error"), t("messages.please_select_file"))
             return
 
         self.file_panel.btn_analyze.setEnabled(False)
         self.log_panel.clear()
         log.info("=" * 50)
-        log.info("开始AI自动化分析")
+        log.info(t("messages.analysis_start"))
         log.info("=" * 50)
 
         self.worker = AnalysisWorker(self.scheduler, file_path, file_info)
@@ -252,30 +315,30 @@ class MainWindow(QMainWindow):
         self.file_panel.set_progress(100)
 
         log.info("=" * 50)
-        log.info("分析完成")
-        log.info(f"总步骤: {session.step_count}")
+        log.info(t("messages.analysis_complete"))
+        log.info(f"{t('messages.total_steps')}: {session.step_count}")
         log.info("=" * 50)
 
         if session.final_report:
             self.code_viewer.set_code(session.final_report)
-            log.info("最终报告已生成")
+            log.info(t("messages.report_generated"))
 
         if session.tool_outputs:
-            summary = "\n\n/* 工具执行摘要 */\n"
+            summary = "\n\n/* " + t("messages.tool_execution_summary") + " */\n"
             for out in session.tool_outputs:
                 tool = out.get("tool", "unknown")
                 result = out.get("result", {})
                 success = result.get("success", False)
                 duration = result.get("duration", 0)
-                summary += f"// {tool}: {'成功' if success else '失败'} ({duration:.1f}s)\n"
+                summary += f"// {tool}: {t('messages.tool_success') if success else t('messages.tool_failed')} ({duration:.1f}s)\n"
             self.code_viewer.append(summary)
 
-        QMessageBox.information(self, "完成", "AI分析已完成！")
+        QMessageBox.information(self, t("messages.completed"), t("messages.analysis_complete_msg"))
 
     def _on_analysis_error(self, error: str):
         self.file_panel.btn_analyze.setEnabled(True)
-        log.error(f"分析错误: {error}")
-        QMessageBox.critical(self, "错误", f"分析过程中出错:\n{error}")
+        log.error(f"{t('messages.error')}: {error}")
+        QMessageBox.critical(self, t("messages.error"), f"{t('messages.error')}:\n{error}")
 
     def _on_ai_progress(self, message: str):
         pass
@@ -288,11 +351,15 @@ class MainWindow(QMainWindow):
 
     def _on_log(self, message: str):
         level = "info"
-        if "[错误]" in message or "ERROR" in message:
+        err = t("messages.error")
+        warn = t("messages.warning")
+        done = t("messages.completed")
+
+        if "[错误]" in message or "[ERROR]" in message or err in message or "ERROR" in message:
             level = "error"
-        elif "[警告]" in message or "WARNING" in message:
+        elif "[警告]" in message or "[WARNING]" in message or warn in message or "WARNING" in message:
             level = "warning"
-        elif "完成" in message:
+        elif "完成" in message or "complete" in message.lower() or done in message:
             level = "success"
         elif "[AI]" in message:
             level = "ai"
@@ -302,8 +369,8 @@ class MainWindow(QMainWindow):
 
     def _clear_cache(self):
         self.tool_executor.clear_cache()
-        log.info("工具缓存已清除")
-        QMessageBox.information(self, "提示", "缓存已清除")
+        log.info(t("messages.cache_cleared"))
+        QMessageBox.information(self, t("messages.info"), t("messages.cache_cleared"))
 
     def _show_settings(self):
         dialog = SettingsDialog(self.config, self)
@@ -317,27 +384,26 @@ class MainWindow(QMainWindow):
             }
             self._save_config()
             self._init_scheduler()
-            QMessageBox.information(self, "提示", "设置已保存，AI配置已更新")
+            QMessageBox.information(self, t("messages.info"), t("messages.config_saved"))
 
     def _show_about(self):
         QMessageBox.about(
             self,
-            "关于 AI-RE Toolkit",
-            """<h2>AI-RE Toolkit v0.1.0</h2>
-            <p>一体化AI反编译工具箱</p>
-            <p>内置全套逆向工具链 + AI调度层 + GUI界面</p>
-            <p>AI自动调用拆解、反编译、分析、解混淆全套工具</p>
+            t("about.title"),
+            f"""<h2>AI-RE Toolkit v0.1.0</h2>
+            <p>{t("about.subtitle")}</p>
+            <p>{t("about.features")}</p>
+            <p>{t("about.capabilities")}</p>
             <hr>
-            <p><b>声明：</b>本软件仅用于自有程序分析和授权安全审计，
-            严禁用于非法破解闭源商用软件。</p>
+            <p><b>{t("about.disclaimer_title")}</b>{t("about.disclaimer")}</p>
             """
         )
 
     def closeEvent(self, event):
         if self.worker and self.worker.isRunning():
             reply = QMessageBox.question(
-                self, "确认",
-                "分析正在进行中，确定要退出吗？",
+                self, t("messages.confirm_exit"),
+                t("messages.analysis_in_progress"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply == QMessageBox.StandardButton.No:
@@ -351,22 +417,22 @@ class MainWindow(QMainWindow):
             return
 
         if self.ai_chat.worker is not None and self.ai_chat.worker.isRunning():
-            self.ai_chat._add_message("AI正在处理中，请等待完成后再发送新指令", is_user=False)
+            self.ai_chat._add_message(t("messages.ai_processing"), is_user=False)
             return
 
         if not self.scheduler:
-            self.ai_chat._add_message("AI未配置，请先在设置中配置AI", is_user=False)
+            self.ai_chat._add_message(t("messages.ai_not_configured"), is_user=False)
             return
 
         self.ai_chat.input_box.clear()
         self.ai_chat._add_message(message, is_user=True)
         self.ai_chat.messages.append({"role": "user", "content": message})
         self.ai_chat._set_loading(True)
-        log.info(f"[Chat] 用户: {message}")
+        log.info("[Chat] User: " + message)
 
         full_context = self.ai_chat.current_context
         if len(self.ai_chat.messages) > 1:
-            full_context += "\n\n对话历史:\n" + self.ai_chat.get_conversation_history()
+            full_context += "\n\n" + t("ai_chat.history") + ":\n" + self.ai_chat.get_conversation_history()
 
         file_path = getattr(self.file_panel, 'current_file', '')
 
@@ -387,32 +453,35 @@ class MainWindow(QMainWindow):
         self.ai_chat.worker.start()
 
     def _on_chat_step(self, step: int, reasoning: str, result: str):
-        msg_text = f"步骤 {step}: {reasoning}\n{result}"
+        msg_text = f"{t('messages.step')} {step}: {reasoning}\n{result}"
         self.ai_chat._add_message(msg_text, is_user=False)
         self.ai_chat.messages.append({"role": "assistant", "content": msg_text})
 
-        if "工具" in result and "\n" in result:
+        # Check for tool execution result (supports both languages)
+        w = t("worker")
+        tool_str = w.get("tool_name", "Tool")
+        if tool_str in result and "\n" in result:
             lines = result.split("\n")
             if len(lines) > 1:
                 output = "\n".join(lines[1:])
                 if len(output) > 50:
                     self.code_viewer.set_code(output)
 
-        log.info(f"[Chat] 步骤{step}: {reasoning[:60]}")
+        log.info(f"[Chat] {t('messages.step')} {step}: {reasoning[:60]}")
 
     def _on_chat_all_done(self, final_report: str, full_log: str):
         self.ai_chat._set_loading(False)
 
-        report_msg = f"最终报告:\n{final_report}"
+        report_msg = f"{t('messages.final_report')}:\n{final_report}"
         self.ai_chat._add_message(report_msg, is_user=False)
         self.ai_chat.messages.append({"role": "assistant", "content": report_msg})
         self.code_viewer.set_code(final_report)
 
-        log.info("[Chat] 任务完成")
+        log.info("[Chat] " + t("messages.chat_completed"))
         self.ai_chat.worker = None
 
     def _on_chat_error(self, error: str):
         self.ai_chat._set_loading(False)
-        self.ai_chat._add_message(f"错误: {error}", is_user=False)
-        log.error(f"[Chat] 错误: {error}")
+        self.ai_chat._add_message(f"{t('messages.error')}: {error}", is_user=False)
+        log.error(f"[Chat] {t('messages.error')}: {error}")
         self.ai_chat.worker = None

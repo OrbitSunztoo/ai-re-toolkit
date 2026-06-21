@@ -2,7 +2,7 @@
 
 一体化AI反编译工具箱 - 借助AI智能调度自动完成二进制文件逆向分析
 
-[English](README.md) | 中文
+[English](README_EN.md) | 中文
 
 ---
 

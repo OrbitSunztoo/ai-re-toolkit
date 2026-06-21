@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QLabel, QPushButton, QGroupBox
 )
 from PySide6.QtCore import Qt
+from src.utils.i18n import t
 
 
 class SettingsDialog(QDialog):
@@ -15,7 +16,7 @@ class SettingsDialog(QDialog):
     def __init__(self, config: dict, parent=None):
         super().__init__(parent)
         self.config = config
-        self.setWindowTitle("AI 配置")
+        self.setWindowTitle(t("settings.title"))
         self.setMinimumWidth(500)
         self._setup_style()
         self._setup_ui()
@@ -50,44 +51,44 @@ class SettingsDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
 
-        title = QLabel("AI 配置")
+        title = QLabel(t("settings.title"))
         title.setStyleSheet("font-size: 20px; font-weight: bold; color: #4a9eff;")
         layout.addWidget(title)
 
-        desc = QLabel("配置 API、Key 和模型参数")
+        desc = QLabel(t("settings.description"))
         desc.setStyleSheet("color: #888; font-size: 13px;")
         layout.addWidget(desc)
 
         # 表单
-        group = QGroupBox("请求配置")
+        group = QGroupBox(t("settings.request_config"))
         form = QFormLayout(group)
         form.setSpacing(12)
 
         self.api_url_input = QLineEdit()
-        self.api_url_input.setPlaceholderText("例如: https://api.deepseek.com/v1")
-        form.addRow(QLabel("AI API:"), self.api_url_input)
+        self.api_url_input.setPlaceholderText(t("settings.api_url_placeholder"))
+        form.addRow(QLabel(t("settings.api_url")), self.api_url_input)
 
         key_layout = QHBoxLayout()
         self.api_key_input = QLineEdit()
-        self.api_key_input.setPlaceholderText("sk-xxxxxxxxxx...")
+        self.api_key_input.setPlaceholderText(t("settings.api_key_placeholder"))
         self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         key_layout.addWidget(self.api_key_input)
 
-        self.key_toggle_btn = QPushButton("显示")
+        self.key_toggle_btn = QPushButton(t("settings.show"))
         self.key_toggle_btn.setStyleSheet("background: #333; color: #888; padding: 8px 16px; font-size: 12px;")
         self.key_toggle_btn.clicked.connect(self._toggle_key_visibility)
         key_layout.addWidget(self.key_toggle_btn)
-        form.addRow(QLabel("AI Key:"), key_layout)
+        form.addRow(QLabel(t("settings.api_key")), key_layout)
 
         self.model_input = QLineEdit()
-        self.model_input.setPlaceholderText("例如: deepseek-chat")
-        form.addRow(QLabel("模型名称:"), self.model_input)
+        self.model_input.setPlaceholderText(t("settings.model_placeholder"))
+        form.addRow(QLabel(t("settings.model")), self.model_input)
 
         layout.addWidget(group)
 
         # 测试连接
         test_layout = QHBoxLayout()
-        self.test_btn = QPushButton("测试连接")
+        self.test_btn = QPushButton(t("settings.test_connection"))
         self.test_btn.setStyleSheet("background: #4a9eff; color: white;")
         self.test_btn.clicked.connect(self._test_connection)
         test_layout.addWidget(self.test_btn)
@@ -102,12 +103,12 @@ class SettingsDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        self.btn_reset = QPushButton("重置默认")
+        self.btn_reset = QPushButton(t("settings.reset_default"))
         self.btn_reset.setStyleSheet("background: #555; color: white;")
         self.btn_reset.clicked.connect(self._reset_default)
         btn_layout.addWidget(self.btn_reset)
 
-        self.btn_save = QPushButton("保存配置")
+        self.btn_save = QPushButton(t("settings.save"))
         self.btn_save.setStyleSheet("background: #4caf50; color: white;")
         self.btn_save.clicked.connect(self.accept)
         btn_layout.addWidget(self.btn_save)
@@ -124,10 +125,10 @@ class SettingsDialog(QDialog):
     def _toggle_key_visibility(self):
         if self.api_key_input.echoMode() == QLineEdit.EchoMode.Password:
             self.api_key_input.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.key_toggle_btn.setText("隐藏")
+            self.key_toggle_btn.setText(t("settings.hide"))
         else:
             self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-            self.key_toggle_btn.setText("显示")
+            self.key_toggle_btn.setText(t("settings.show"))
 
     def _reset_default(self):
         self.api_url_input.setText("https://api.deepseek.com/v1")
@@ -143,7 +144,7 @@ class SettingsDialog(QDialog):
         model = self.model_input.text().strip()
 
         if not url or not api_key:
-            self.status_label.setText("请填写 API 和 Key")
+            self.status_label.setText(t("settings.please_fill"))
             self.status_label.setStyleSheet("color: #f44336;")
             return
 
@@ -157,16 +158,16 @@ class SettingsDialog(QDialog):
             )
 
             if resp.status_code == 200:
-                self.status_label.setText("连接成功")
+                self.status_label.setText(t("settings.connection_success"))
                 self.status_label.setStyleSheet("color: #4caf50;")
             else:
-                self.status_label.setText(f"错误: {resp.status_code}")
+                self.status_label.setText(f"{t('settings.connection_error')}: {resp.status_code}")
                 self.status_label.setStyleSheet("color: #f44336;")
         except requests.exceptions.Timeout:
-            self.status_label.setText("连接超时")
+            self.status_label.setText(t("settings.connection_timeout"))
             self.status_label.setStyleSheet("color: #f44336;")
         except Exception as e:
-            self.status_label.setText(f"错误: {str(e)[:30]}")
+            self.status_label.setText(f"{t('settings.connection_error')}: {str(e)[:30]}")
             self.status_label.setStyleSheet("color: #f44336;")
 
     def get_config(self) -> dict:

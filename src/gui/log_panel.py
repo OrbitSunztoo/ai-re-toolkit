@@ -5,6 +5,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton, QLabel, QLineEdit
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QTextCursor, QColor, QTextCharFormat
+from src.utils.i18n import t
 
 
 class LogPanel(QWidget):
@@ -15,18 +16,24 @@ class LogPanel(QWidget):
         super().__init__(parent)
         self._setup_ui()
 
+    def update_texts(self):
+        """更新所有文本（语言切换时调用）"""
+        self.title.setText(t("log_panel.title"))
+        self.btn_clear.setText(t("ai_chat.clear"))
+        self.search_box.setPlaceholderText(t("log_panel.search_hint"))
+
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
 
         # 标题栏
         header = QHBoxLayout()
-        title = QLabel("分析日志")
-        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #fff;")
-        header.addWidget(title)
+        self.title = QLabel(t("log_panel.title"))
+        self.title.setStyleSheet("font-size: 16px; font-weight: bold; color: #fff;")
+        header.addWidget(self.title)
 
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("搜索日志...")
+        self.search_box.setPlaceholderText(t("log_panel.title") + "...")
         self.search_box.setStyleSheet("""
             QLineEdit {
                 background: #2a2a2a;
@@ -39,7 +46,7 @@ class LogPanel(QWidget):
         self.search_box.textChanged.connect(self._highlight_search)
         header.addWidget(self.search_box)
 
-        self.btn_clear = QPushButton("清空")
+        self.btn_clear = QPushButton(t("ai_chat.clear"))
         self.btn_clear.setStyleSheet("""
             QPushButton {
                 background: #555;

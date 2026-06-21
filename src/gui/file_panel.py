@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
+from src.utils.i18n import t
 
 
 class DropArea(QTextEdit):
@@ -19,10 +20,7 @@ class DropArea(QTextEdit):
         super().__init__(parent)
         self.setAcceptDrops(True)
         self.setReadOnly(True)
-        self.setPlaceholderText(
-            "拖拽文件到此处，或点击上方按钮选择文件\n"
-            "支持的格式: EXE, DLL, ELF, APK, DEX, JS, ZIP, JAR"
-        )
+        self._update_placeholder()
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setStyleSheet("""
             QTextEdit {
@@ -37,6 +35,13 @@ class DropArea(QTextEdit):
                 background: #323232;
             }
         """)
+
+    def _update_placeholder(self):
+        self.setPlaceholderText(
+            t("file_panel.no_file") + "\n" +
+            t("file_panel.select_file") + "\n" +
+            "EXE, DLL, ELF, APK, DEX, JS, ZIP, JAR"
+        )
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasUrls():
@@ -82,24 +87,36 @@ class FilePanel(QWidget):
         self.file_info = None
         self._setup_ui()
 
+    def update_texts(self):
+        """更新所有文本（语言切换时调用）"""
+        self.drop_area._update_placeholder()
+        # 更新按钮文本
+        self.btn_select.setText(t("file_panel.select_file"))
+        self.btn_analyze.setText(t("file_panel.analyze"))
+        # 更新信息组标题
+        self.info_group.setTitle(t("file_panel.file_info"))
+        # 刷新文件信息显示
+        if self.current_file:
+            self._analyze_file(self.current_file)
+
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
         # 标题
-        title = QLabel("目标文件")
+        title = QLabel(t("file_panel.title"))
         title.setStyleSheet("font-size: 16px; font-weight: bold; color: #fff;")
         layout.addWidget(title)
 
         # 按钮区域
         btn_layout = QHBoxLayout()
 
-        self.btn_select = QPushButton("选择文件")
+        self.btn_select = QPushButton(t("file_panel.select_file"))
         self.btn_select.setStyleSheet(self._button_style("#4a9eff"))
         self.btn_select.clicked.connect(self._on_select_file)
         btn_layout.addWidget(self.btn_select)
 
-        self.btn_analyze = QPushButton("开始AI分析")
+        self.btn_analyze = QPushButton(t("file_panel.analyze"))
         self.btn_analyze.setStyleSheet(self._button_style("#4caf50"))
         self.btn_analyze.setEnabled(False)
         self.btn_analyze.clicked.connect(self.start_analysis.emit)
@@ -115,8 +132,8 @@ class FilePanel(QWidget):
         layout.addWidget(self.drop_area)
 
         # 文件信息区域
-        info_group = QGroupBox("文件信息")
-        info_group.setStyleSheet("""
+        self.info_group = QGroupBox(t("file_panel.file_info"))
+        self.info_group.setStyleSheet("""
             QGroupBox {
                 color: #ccc;
                 border: 1px solid #444;
@@ -130,14 +147,14 @@ class FilePanel(QWidget):
                 padding: 0 4px;
             }
         """)
-        info_layout = QGridLayout(info_group)
+        info_layout = QGridLayout(self.info_group)
 
-        self.lbl_name = QLabel("名称: -")
-        self.lbl_type = QLabel("类型: -")
-        self.lbl_size = QLabel("大小: -")
-        self.lbl_arch = QLabel("架构: -")
-        self.lbl_packed = QLabel("加壳: -")
-        self.lbl_magic = QLabel("魔数: -")
+        self.lbl_name = QLabel(f"{t('file_panel.type')}: -")
+        self.lbl_type = QLabel(f"{t('file_panel.type')}: -")
+        self.lbl_size = QLabel(f"{t('file_panel.size')}: -")
+        self.lbl_arch = QLabel(f"{t('file_panel.architecture')}: -")
+        self.lbl_packed = QLabel(f"{t('file_panel.packed')}: -")
+        self.lbl_magic = QLabel(f"{t('file_panel.magic')}: -")
 
         labels = [self.lbl_name, self.lbl_type, self.lbl_size,
                   self.lbl_arch, self.lbl_packed, self.lbl_magic]
@@ -145,10 +162,10 @@ class FilePanel(QWidget):
             lbl.setStyleSheet("color: #bbb; padding: 2px 0;")
             info_layout.addWidget(lbl, i // 2, i % 2)
 
-        layout.addWidget(info_group)
+        layout.addWidget(self.info_group)
 
         # 建议工具
-        self.lbl_tools = QLabel("建议工具: -")
+        self.lbl_tools = QLabel(t("file_panel.analyze") + ": -")
         self.lbl_tools.setStyleSheet("color: #aaa; padding: 4px;")
         self.lbl_tools.setWordWrap(True)
         layout.addWidget(self.lbl_tools)
@@ -195,15 +212,16 @@ class FilePanel(QWidget):
         """
 
     def _on_select_file(self):
+        dlg = t("dialog")
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择要分析的文件",
+            dlg["select_file"],
             "",
-            "所有文件 (*);;"
-            "可执行文件 (*.exe *.dll *.elf);;"
-            "Android文件 (*.apk *.dex);;"
-            "Java文件 (*.jar *.class);;"
-            "脚本文件 (*.js *.py)"
+            f"{dlg['all_files']} (*);;"
+            f"{dlg['exe_files']} (*.exe *.dll *.elf);;"
+            f"{dlg['android_files']} (*.apk *.dex);;"
+            f"{dlg['java_files']} (*.jar *.class);;"
+            f"{dlg['script_files']} (*.js *.py)"
         )
         if path:
             self._on_file_dropped(path)
@@ -226,14 +244,15 @@ class FilePanel(QWidget):
             # 检查文件大小（防止读取过大文件）
             size = os.path.getsize(abs_path)
             if size > 500 * 1024 * 1024:  # 500MB限制
-                self._show_error(f"文件过大 ({size // (1024*1024)}MB)，最大支持500MB")
+                msg = t("file_panel.file_too_large").format(size=size // (1024*1024))
+                self._show_error(msg)
                 return False
 
             # 禁止的系统敏感路径
             forbidden = ['\\Windows\\System32', '\\Windows\\SysWOW64', '/etc/', '/bin/', '/sbin/']
             for forbid in forbidden:
                 if forbid.lower() in abs_path.lower():
-                    self._show_error("禁止访问系统目录")
+                    self._show_error(t("file_panel.forbidden_dir"))
                     return False
 
             return True
@@ -243,14 +262,14 @@ class FilePanel(QWidget):
     def _show_error(self, msg: str):
         """显示错误消息"""
         from PySide6.QtWidgets import QMessageBox
-        QMessageBox.warning(self, "错误", msg)
+        QMessageBox.warning(self, t("messages.error"), msg)
 
     def _on_file_dropped(self, path: str):
         # 安全校验
         if not self._validate_file_path(path):
             return
         self.current_file = path
-        self.drop_area.setPlainText(f"已加载: {os.path.basename(path)}")
+        self.drop_area.setPlainText(f"{t('file_panel.loaded')}: {os.path.basename(path)}")
         self._analyze_file(path)
 
     def _analyze_file(self, path: str):
@@ -260,21 +279,23 @@ class FilePanel(QWidget):
         try:
             info = analyze_file(path)
             self.file_info = info
+            ctx = t("context")
+            is_packed = info.get('is_packed')
 
-            self.lbl_name.setText(f"名称: {os.path.basename(path)}")
-            self.lbl_type.setText(f"类型: {info.get('type_name', 'unknown')}")
-            self.lbl_size.setText(f"大小: {self._format_size(info.get('size', 0))}")
-            self.lbl_arch.setText(f"架构: {info.get('arch', 'unknown') or 'N/A'}")
-            self.lbl_packed.setText(f"加壳: {'是' if info.get('is_packed') else '否'}")
-            self.lbl_magic.setText(f"魔数: {info.get('magic', 'N/A')[:16]}...")
+            self.lbl_name.setText(f"{ctx['name']}: {os.path.basename(path)}")
+            self.lbl_type.setText(f"{ctx['type']}: {info.get('type_name', 'unknown')}")
+            self.lbl_size.setText(f"{ctx['size']}: {self._format_size(info.get('size', 0))}")
+            self.lbl_arch.setText(f"{ctx['architecture']}: {info.get('arch', 'unknown') or 'N/A'}")
+            self.lbl_packed.setText(f"{ctx['packed']}: {ctx['yes'] if is_packed else ctx['no']}")
+            self.lbl_magic.setText(f"{ctx['magic']}: {info.get('magic', 'N/A')[:16]}...")
 
             tools = info.get('suggested_tools', [])
-            self.lbl_tools.setText(f"建议工具: {', '.join(tools) if tools else '无'}")
+            self.lbl_tools.setText(f"{ctx['suggested_tools']}: {', '.join(tools) if tools else 'N/A'}")
 
             self.btn_analyze.setEnabled(True)
             self.file_loaded.emit(path, info)
         except Exception as e:
-            self.lbl_type.setText(f"错误: {e}")
+            self.lbl_type.setText(f"{t('messages.error')}: {e}")
             self.btn_analyze.setEnabled(False)
 
     def _format_size(self, size: int) -> str:

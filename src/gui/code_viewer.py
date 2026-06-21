@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QColor, QTextCharFormat, QTextCursor, QSyntaxHighlighter
+from src.utils.i18n import t
 
 
 class SimpleSyntaxHighlighter(QSyntaxHighlighter):
@@ -88,6 +89,14 @@ class CodeViewer(QWidget):
         self.search_results = []
         self.current_result = -1
 
+    def update_texts(self):
+        """更新所有文本"""
+        self.title.setText(t("code_viewer.preview"))
+        self.btn_prev.setText(t("code_viewer.prev"))
+        self.btn_next.setText(t("code_viewer.next"))
+        self.search_input.setPlaceholderText(t("code_viewer.search_hint"))
+        self.status.setText(t("code_viewer.ready"))
+
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
@@ -95,14 +104,14 @@ class CodeViewer(QWidget):
         # 工具栏
         toolbar = QHBoxLayout()
 
-        title = QLabel("代码预览")
-        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #fff;")
-        toolbar.addWidget(title)
+        self.title = QLabel(t("code_viewer.preview"))
+        self.title.setStyleSheet("font-size: 16px; font-weight: bold; color: #fff;")
+        toolbar.addWidget(self.title)
 
         toolbar.addStretch()
 
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("搜索代码...")
+        self.search_input.setPlaceholderText(t("code_viewer.search_hint"))
         self.search_input.setStyleSheet("""
             QLineEdit {
                 background: #2a2a2a;
@@ -116,12 +125,12 @@ class CodeViewer(QWidget):
         self.search_input.returnPressed.connect(self._search_next)
         toolbar.addWidget(self.search_input)
 
-        self.btn_prev = QPushButton("上一个")
+        self.btn_prev = QPushButton(t("code_viewer.prev"))
         self.btn_prev.setStyleSheet(self._btn_style("#555"))
         self.btn_prev.clicked.connect(self._search_prev)
         toolbar.addWidget(self.btn_prev)
 
-        self.btn_next = QPushButton("下一个")
+        self.btn_next = QPushButton(t("code_viewer.next"))
         self.btn_next.setStyleSheet(self._btn_style("#4a9eff"))
         self.btn_next.clicked.connect(self._search_next)
         toolbar.addWidget(self.btn_next)
@@ -153,7 +162,7 @@ class CodeViewer(QWidget):
         layout.addWidget(self.code_edit)
 
         # 状态栏
-        self.status = QLabel("就绪")
+        self.status = QLabel(t("code_viewer.ready"))
         self.status.setStyleSheet("color: #888; font-size: 11px;")
         layout.addWidget(self.status)
 
@@ -174,14 +183,15 @@ class CodeViewer(QWidget):
 
     def set_code(self, text: str, language: str = "c"):
         """设置显示代码"""
+        cv = t("code_viewer")
         self.code_edit.setPlainText(text)
-        self.status.setText(f"{len(text)} 字符 | {text.count(chr(10))} 行")
+        self.status.setText(f"{len(text)} {cv['chars']} | {text.count(chr(10))} {cv['lines']}")
         self.search_results.clear()
         self.current_result = -1
 
     def clear(self):
         self.code_edit.clear()
-        self.status.setText("就绪")
+        self.status.setText(t("code_viewer.ready"))
 
     def append(self, text: str):
         """追加代码"""
@@ -207,6 +217,7 @@ class CodeViewer(QWidget):
 
     def _do_search(self, text: str):
         """执行搜索"""
+        cv = t("code_viewer")
         self.search_results.clear()
         if not text:
             self.lbl_results.setText("")
@@ -221,7 +232,7 @@ class CodeViewer(QWidget):
                 break
             self.search_results.append(cursor)
 
-        self.lbl_results.setText(f"{len(self.search_results)} 个匹配")
+        self.lbl_results.setText(f"{len(self.search_results)} {cv['matches']}")
 
     def _goto_result(self):
         """跳转到搜索结果"""

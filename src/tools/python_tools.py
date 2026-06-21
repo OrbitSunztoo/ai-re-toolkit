@@ -176,7 +176,6 @@ class APKTool:
                         elif name.endswith('.so'):
                             result["native_libs"].append(name.split('/')[-1])
             except zipfile.BadZipFile:
-                # ZIP格式错误
                 return {"success": False, "error": "无效的APK文件（非ZIP格式）"}
             except Exception as e:
                 from src.utils.logger import log
@@ -185,6 +184,13 @@ class APKTool:
                     "success": False,
                     "error": f"分析失败 [{os.path.basename(file_path)}]: {str(e)}"
                 }
+
+            return result
+
+        except Exception as e:
+            from src.utils.logger import log
+            log.error(f"APK分析异常 [{file_path}]: {e}")
+            return {"success": False, "error": f"分析失败: {str(e)}"}
 
 
 class FileInfoTool:

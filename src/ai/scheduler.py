@@ -8,9 +8,7 @@ from typing import Dict, List, Optional, Callable, Any
 from dataclasses import dataclass, field
 
 from .providers.base import BaseProvider, AIMessage, AIResponse
-from .providers.ollama_provider import OllamaProvider
-from .providers.openai_provider import OpenAIProvider, AnthropicProvider
-from .providers.other_providers import QwenProvider, KimiProvider, DeepSeekProvider, GrokProvider
+from .providers.openai_provider import make_provider, PROVIDER_PRESETS, PROVIDER_MODELS
 
 
 @dataclass
@@ -373,53 +371,24 @@ class AIScheduler:
 
 
 class ProviderFactory:
-    """Provider 工厂类"""
-
-    _providers = {
-        # 本地离线模型
-        "ollama": OllamaProvider,
-        # OpenAI 系列
-        "openai": OpenAIProvider,
-        # Anthropic 系列
-        "anthropic": AnthropicProvider,
-        # 其他云端模型
-        "qwen": QwenProvider,      # 通义千问
-        "kimi": KimiProvider,      # Kimi (Moonshot)
-        "deepseek": DeepSeekProvider,  # DeepSeek
-        "grok": GrokProvider,      # Grok (xAI)
-        # 自定义（兼容OpenAI格式）
-        "custom": OpenAIProvider,
-    }
-
-    # 模型映射（Provider名称 -> 模型列表）
-    _model_lists = {
-        "ollama": ["llama3", "llama3.2", "llama3.2-vision", "codellama", "qwen2.5", "qwen2.5-coder", "mistral", "mixtral", "phi3", "deepseek-coder", "gemma2"],
-        "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo", "o1-preview", "o1-mini"],
-        "anthropic": ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229", "claude-3-sonnet-20240229"],
-        "qwen": ["qwen-plus", "qwen-turbo", "qwen-max", "qwen-long", "qwen-coder-plus"],
-        "kimi": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
-        "deepseek": ["deepseek-chat", "deepseek-coder"],
-        "grok": ["grok-2", "grok-2-mini", "grok-beta"],
-    }
+    """Provider 工厂类 - 统一入口"""
 
     @classmethod
     def create(cls, name: str, config: Dict) -> BaseProvider:
         """创建Provider实例"""
-        if name not in cls._providers:
-            raise ValueError(f"未知的Provider: {name}。可用: {list(cls._providers.keys())}")
-        return cls._providers[name](config)
+        return make_provider(name, config)
 
     @classmethod
     def list_providers(cls) -> List[str]:
         """列出所有可用Provider"""
-        return list(cls._providers.keys())
+        return list(PROVIDER_PRESETS.keys())
 
     @classmethod
     def get_models(cls, provider_name: str) -> List[str]:
         """获取指定Provider的模型列表"""
-        return cls._model_lists.get(provider_name, [])
+        return PROVIDER_MODELS.get(provider_name, [])
 
     @classmethod
     def get_all_models(cls) -> Dict[str, List[str]]:
         """获取所有Provider的模型映射"""
-        return cls._model_lists.copy()
+        return PROVIDER_MODELS.copy()

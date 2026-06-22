@@ -117,6 +117,7 @@ class AIScheduler:
     def start_analysis(self, file_path: str, file_info: Dict) -> AnalysisSession:
         """
         启动自动化分析流程
+        AI可以自由响应，也可以选择调用工具执行操作
         Returns:
             AnalysisSession: 完整的分析会话结果
         """
@@ -129,81 +130,93 @@ class AIScheduler:
         # 构建初始消息
         messages = [
             AIMessage("system", self.system_prompt),
-            AIMessage("user", self._build_initial_prompt(file_info))
+            AIMessage("user", self._build_analysis_prompt(file_info))
         ]
 
         self._notify(f"开始分析: {os.path.basename(file_path)}")
         self._notify(f"文件类型: {file_info.get('type_name', 'unknown')}")
 
-        # Agent 主循环
-        while session.step_count < session.max_steps and not session.is_complete:
-            session.step_count += 1
-            self._notify(f"--- 步骤 {session.step_count} ---")
+        # AI分析循环 - 支持工具调用（可选）
+        import re
+        import json
+        
+        for step in range(1, session.max_steps + 1):
+            session.step_count = step
+            self._notify(f"--- 步骤 {step} ---")
 
-            # 1. 调用AI获取下一步指令
             try:
                 response = self.provider.chat(messages)
                 if not response or not response.content:
                     raise ValueError("AI返回了空响应")
-                instruction = self._parse_ai_response(response.content)
+                content = response.content
             except Exception as e:
                 self._notify(f"AI响应错误: {e}")
                 session.final_report = f"分析中断: AI响应错误 - {e}"
                 break
 
-            # 记录历史
-            session.history.append({
-                "step": session.step_count,
-                "ai_instruction": instruction,
-                "raw_response": response.content
-            })
+            messages.append(AIMessage("assistant", content))
 
-            # 2. 执行AI指令
-            result = self._execute_instruction(instruction, session)
+            # 检查是否包含工具调用
+            tool_call = None
+            pattern = r'```tool_call\s*(\{.*?\})\s*```'
+            match = re.search(pattern, content, re.DOTALL)
+            if match:
+                try:
+                    tool_call = json.loads(match.group(1))
+                except json.JSONDecodeError:
+                    pass
 
-            if instruction.get("is_complete"):
-                session.is_complete = True
-                session.final_report = instruction.get("message", "分析完成")
-                self._notify("分析完成")
-                break
+            if tool_call:
+                action = tool_call.get("action", "")
+                tool_name = tool_call.get("tool", "")
+                params = tool_call.get("params", {})
 
-            if instruction["action"] == "ask_user":
-                session.final_report = instruction.get("message", "需要用户输入")
-                self._notify(f"需要用户输入: {session.final_report}")
-                break
+                if action == "execute_tool" and tool_name:
+                    self._notify(f"执行工具: {tool_name}")
+                    result = self._execute_instruction(tool_call, session)
+                    success = result.get("status") == "ok"
+                    output = result.get("output", "")[:2000]
+                    status = "成功" if success else "失败"
+                    self._notify(f"工具执行{status}: {output[:300]}")
 
-            # 3. 将结果反馈给AI
-            feedback = self._build_feedback(result, session)
-            messages.append(AIMessage("assistant", response.content))
-            messages.append(AIMessage("user", feedback))
+                    feedback = f"工具执行结果:\n工具: {tool_name}\n状态: {status}\n输出:\n{output}\n\n请根据结果继续分析或总结。"
+                    messages.append(AIMessage("user", feedback))
+                    messages = self.provider.truncate_history(messages)
+                    continue
 
-            # 截断历史防止超出token限制
-            messages = self.provider.truncate_history(messages)
+                elif action in ("write", "delete", "create"):
+                    result = self._execute_instruction(tool_call, session)
+                    self._notify(f"文件操作({action}): {result.get('output', '')[:200]}")
+                    feedback = f"文件操作完成: {result.get('output', '')}\n\n请继续分析。"
+                    messages.append(AIMessage("user", feedback))
+                    messages = self.provider.truncate_history(messages)
+                    continue
+
+            # 没有工具调用，认为分析完成
+            session.is_complete = True
+            session.final_report = content
+            self._notify("分析完成")
+            break
 
         if session.step_count >= session.max_steps:
-            session.final_report = "分析达到最大步数限制，可能未完成"
+            session.final_report = f"分析达到最大步数限制\n\n最后结果:\n{content}"
             self._notify(session.final_report)
 
         return session
 
-    def _build_initial_prompt(self, file_info: Dict) -> str:
+    def _build_analysis_prompt(self, file_info: Dict) -> str:
         """构建初始分析提示"""
-        return f"""分析以下二进制文件，请返回下一步操作指令（JSON格式）。
+        return f"""请分析以下文件，给出详细的分析报告。
 
 文件信息:
 - 路径: {file_info.get('path', '')}
 - 类型: {file_info.get('type_name', 'unknown')}
 - 大小: {file_info.get('size', 0)} bytes
 - 架构: {file_info.get('arch', 'unknown')}
-- 是否加壳: {file_info.get('is_packed', False)}
+- 是否加壳: {'是' if file_info.get('is_packed', False) else '否'}
 - 建议工具: {', '.join(file_info.get('suggested_tools', []))}
 
-支持平台:
-- Windows: EXE, DLL (使用 pefile, DIE, UPX, Ghidra)
-- Android: APK, DEX (使用 jadx, apktool, pyaxmlparser)
-- iOS: IPA (使用 strings, unzip)
-
-请根据文件类型选择合适的分析流程，返回第一个指令。
+你可以直接分析并给出结论，也可以调用工具获取更多信息。请给出完整的分析报告。
 """
 
     def _execute_instruction(self, instruction: Dict, session: AnalysisSession) -> Dict:

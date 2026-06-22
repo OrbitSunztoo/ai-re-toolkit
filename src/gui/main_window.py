@@ -17,7 +17,7 @@ from .log_panel import LogPanel
 from .code_viewer import CodeViewer
 from .ai_chat_panel import AIChatPanel
 from .settings_dialog import SettingsDialog
-from .chat_worker import PersistentChatWorker
+from .chat_worker import ChatWorker
 from src.utils.logger import log
 from src.core.file_analyzer import analyze_file
 from src.ai.scheduler import AIScheduler, ProviderFactory, AnalysisSession
@@ -443,39 +443,33 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        self.ai_chat.worker = PersistentChatWorker(
+        self.ai_chat.worker = ChatWorker(
             self.scheduler, self.tool_executor, message, full_context, file_path
         )
-        self.ai_chat.worker.step_completed.connect(self._on_chat_step)
-        self.ai_chat.worker.all_done.connect(self._on_chat_all_done)
+        self.ai_chat.worker.response_ready.connect(self._on_chat_response)
+        self.ai_chat.worker.tool_executed.connect(self._on_chat_tool_executed)
         self.ai_chat.worker.log_signal.connect(self._on_log)
         self.ai_chat.worker.error.connect(self._on_chat_error)
         self.ai_chat.worker.start()
 
-    def _on_chat_step(self, step: int, reasoning: str, result: str):
-        msg_text = f"{t('messages.step')} {step}: {reasoning}\n{result}"
+    def _on_chat_tool_executed(self, reasoning: str, result: str):
+        msg_text = f"🔧 {reasoning}\n{result}"
         self.ai_chat._add_message(msg_text, is_user=False)
         self.ai_chat.messages.append({"role": "assistant", "content": msg_text})
 
-        # Check for tool execution result (supports both languages)
-        w = t("worker")
-        tool_str = w.get("tool_name", "Tool")
-        if tool_str in result and "\n" in result:
-            lines = result.split("\n")
-            if len(lines) > 1:
-                output = "\n".join(lines[1:])
-                if len(output) > 50:
-                    self.code_viewer.set_code(output)
+        if len(result) > 50:
+            self.code_viewer.set_code(result)
 
-        log.info(f"[Chat] {t('messages.step')} {step}: {reasoning[:60]}")
+        log.info(f"[Chat] {t('messages.tool_execution')}: {reasoning[:60]}")
 
-    def _on_chat_all_done(self, final_report: str, full_log: str):
+    def _on_chat_response(self, content: str):
         self.ai_chat._set_loading(False)
 
-        report_msg = f"{t('messages.final_report')}:\n{final_report}"
-        self.ai_chat._add_message(report_msg, is_user=False)
-        self.ai_chat.messages.append({"role": "assistant", "content": report_msg})
-        self.code_viewer.set_code(final_report)
+        self.ai_chat._add_message(content, is_user=False)
+        self.ai_chat.messages.append({"role": "assistant", "content": content})
+
+        if len(content) > 50:
+            self.code_viewer.set_code(content)
 
         log.info("[Chat] " + t("messages.chat_completed"))
         self.ai_chat.worker = None

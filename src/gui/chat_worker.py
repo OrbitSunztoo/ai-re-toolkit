@@ -1,34 +1,61 @@
 """
-持续聊天工作线程
-实现AI Agent循环：执行工具 → 反馈 → 继续执行 → 直至完成
+聊天工作线程
+支持AI自由响应，同时可选调用工具执行操作
 """
+import json
+import re
 from PySide6.QtCore import QThread, Signal
 
 from src.ai.providers.base import AIMessage
 from src.utils.i18n import t
 
 
-class PersistentChatWorker(QThread):
-    """AI 持续执行工作线程 - 最多15步Agent循环"""
+class ChatWorker(QThread):
+    """
+    聊天工作线程
+    AI可以自由响应，也可以选择调用工具执行操作
+    """
 
-    step_completed = Signal(int, str, str)   # 步骤号, 推理, 结果摘要
-    all_done = Signal(str, str)              # 最终报告, 完整日志
+    response_ready = Signal(str)
+    tool_executed = Signal(str, str)
     log_signal = Signal(str)
     error = Signal(str)
 
     def __init__(self, scheduler, tool_executor, message: str, context: str = "",
-                 file_path: str = "", max_steps: int = 15):
+                 file_path: str = "", max_tool_rounds: int = 5):
         super().__init__()
         self.scheduler = scheduler
         self.tool_executor = tool_executor
         self.message = message
         self.context = context
         self.file_path = file_path
-        self.max_steps = max_steps
+        self.max_tool_rounds = max_tool_rounds
         self._stop = False
 
     def stop(self):
         self._stop = True
+
+    def _extract_tool_call(self, content: str):
+        """从AI响应中提取tool_call块"""
+        pattern = r'```tool_call\s*(\{.*?\})\s*```'
+        match = re.search(pattern, content, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                pass
+        return None
+
+    def _execute_tool(self, tool_name: str, params: dict):
+        """执行工具"""
+        if not self.tool_executor:
+            return {"success": False, "stdout": "", "stderr": "工具执行器未注册"}
+
+        try:
+            result = self.tool_executor.execute(tool_name, params)
+            return result
+        except Exception as e:
+            return {"success": False, "stdout": "", "stderr": str(e)}
 
     def run(self):
         try:
@@ -37,134 +64,85 @@ class PersistentChatWorker(QThread):
                 return
 
             messages = [AIMessage("system", self.scheduler.system_prompt)]
-            w = t("worker")
 
-            initial_prompt = self.context
+            full_prompt = ""
+            if self.context:
+                full_prompt += self.context + "\n\n"
+
             if self.file_path:
-                initial_prompt += f"\n\n{w['current_file']}: {self.file_path}"
-            initial_prompt += (
-                f"\n\n{w['user_command']}: {self.message}\n\n"
-                f"{w['analyze_instruction']}"
-                f"{w['continue_instruction']}"
-                f"{w['complete_instruction']}"
-            )
-            messages.append(AIMessage("user", initial_prompt))
+                w = t("worker")
+                full_prompt += f"{w['current_file']}: {self.file_path}\n\n"
 
-            full_log = []
-            final_report = ""
+            full_prompt += f"{t('worker.user_command')}: {self.message}"
+            messages.append(AIMessage("user", full_prompt))
 
-            for step in range(1, self.max_steps + 1):
+            self.log_signal.emit(f"[Chat] {t('messages.ai_processing')}...")
+
+            if self._stop:
+                return
+
+            tool_round = 0
+            while tool_round < self.max_tool_rounds:
                 if self._stop:
-                    full_log.append(t("messages.user_interrupt"))
-                    break
-
-                self.log_signal.emit(f"=== {t('messages.ai_step')} {step} ===")
+                    return
 
                 try:
                     response = self.scheduler.provider.chat(messages)
                     content = response.content
                 except Exception as e:
-                    full_log.append(f"Step{step}: {w['ai_request_failed']} - {e}")
-                    self.error.emit(f"{w['ai_request_failed']}: {e}")
+                    self.error.emit(f"{t('worker.ai_request_failed')}: {e}")
                     return
 
-                try:
-                    instruction = self.scheduler._parse_ai_response(content)
-                except ValueError as e:
-                    full_log.append(f"Step{step}: {w['parse_failed']} - {e}")
-                    self.step_completed.emit(step, "Parse Error", f"{w['invalid_json']}: {str(e)[:100]}")
-                    final_report = w['analysis_interrupted'] + ": " + w['invalid_json']
-                    break
+                messages.append(AIMessage("assistant", content))
 
-                action = instruction.get("action", "")
-                reasoning = instruction.get("reasoning", "")
-                is_complete = instruction.get("is_complete", False)
+                tool_call = self._extract_tool_call(content)
 
-                self.log_signal.emit(f"Action: {action} | {reasoning[:80]}")
+                if tool_call:
+                    action = tool_call.get("action", "")
+                    tool_name = tool_call.get("tool", "")
+                    params = tool_call.get("params", {})
+                    reasoning = tool_call.get("reasoning", "")
 
-                if is_complete or action == "report":
-                    final_report = instruction.get("message", t("messages.analysis_complete"))
-                    full_log.append(f"Step{step}: {w['completed']}")
-                    self.step_completed.emit(step, reasoning, f"{w['completed']}: {final_report[:500]}")
-                    break
+                    if action == "execute_tool" and tool_name:
+                        self.log_signal.emit(f"[Chat] {t('messages.tool_execution')}: {tool_name}")
 
-                if action == "ask_user":
-                    final_report = instruction.get("message", t("messages.user_input_required"))
-                    full_log.append(f"Step{step}: {t('messages.user_input_required')}")
-                    self.step_completed.emit(step, reasoning, f"{t('messages.user_input_required')}: {final_report}")
-                    break
+                        result = self._execute_tool(tool_name, params)
+                        success = result.get("success", False)
+                        stdout = result.get("stdout", "")[:2000]
+                        stderr = result.get("stderr", "")[:500]
 
-                if action == "execute_tool":
-                    tool_name = instruction.get("tool", "")
-                    params = instruction.get("params", {})
+                        status = t("messages.tool_success") if success else t("messages.tool_failed")
+                        result_summary = f"{status}\n{stdout[:500]}"
+                        if stderr:
+                            result_summary += f"\nError: {stderr[:200]}"
 
-                    self.log_signal.emit(f"{w['tool_execution']}: {tool_name}")
-                    result = self.tool_executor.execute(tool_name, params)
+                        self.tool_executed.emit(reasoning, result_summary)
 
-                    success = result.get("success", False)
-                    stdout = result.get("stdout", "")[:2000]
-                    stderr = result.get("stderr", "")[:500]
+                        feedback = f"工具执行结果:\n工具: {tool_name}\n状态: {status}\n输出:\n{stdout}\n\n请根据结果继续分析或总结。"
+                        messages.append(AIMessage("user", feedback))
+                        messages = self.scheduler.provider.truncate_history(messages)
 
-                    status = t("messages.tool_success") if success else t("messages.tool_failed")
-                    result_summary = f"{w['tool_name']} {tool_name} {status}\n{stdout[:400]}"
-                    if stderr:
-                        result_summary += f"\nError: {stderr[:200]}"
+                        tool_round += 1
+                        continue
 
-                    full_log.append(f"Step{step}: {tool_name} - {status}")
-                    self.step_completed.emit(step, reasoning, result_summary)
+                    elif action in ("write", "delete", "create"):
+                        result = self.scheduler._execute_instruction(tool_call, None)
+                        status = result.get("status", "unknown")
+                        output = result.get("output", "")
 
-                    feedback = (
-                        f"{w['tool_result']}:\n"
-                        f"{w['tool_name']}: {tool_name}\n"
-                        f"{w['status']}: {status}\n"
-                        f"{w['output']}:\n{stdout}\n\n"
-                        f"{w['continue_result']}"
-                        f"{w['continue_or_finish']}"
-                    )
-                    messages.append(AIMessage("assistant", content))
-                    messages.append(AIMessage("user", feedback))
-                    messages = self.scheduler.provider.truncate_history(messages)
+                        self.tool_executed.emit(reasoning, f"文件操作({action}): {output[:400]}")
 
-                elif action in ("write", "delete", "create"):
-                    session = type("Session", (), {
-                        "file_path": self.file_path,
-                        "tool_outputs": [],
-                        "step_count": step
-                    })()
-                    result = self.scheduler._execute_instruction(instruction, session)
-                    status = result.get("status", w["unknown"])
-                    output = result.get("output", "")
+                        feedback = f"文件操作完成: {output}\n\n请根据结果继续。"
+                        messages.append(AIMessage("user", feedback))
+                        messages = self.scheduler.provider.truncate_history(messages)
 
-                    full_log.append(f"Step{step}: {w['file_operation']} {action} - {status}")
-                    self.step_completed.emit(step, reasoning, f"{w['file_operation']}({action}): {output[:400]}")
+                        tool_round += 1
+                        continue
 
-                    feedback = (
-                        f"{w['file_operation_complete']}: {output}\n\n"
-                        f"{t('messages.continue_or_complete')}"
-                    )
-                    messages.append(AIMessage("assistant", content))
-                    messages.append(AIMessage("user", feedback))
-                    messages = self.scheduler.provider.truncate_history(messages)
+                break
 
-                elif action == "analyze":
-                    full_log.append(f"Step{step}: {t('messages.analyzing_in_progress').replace('...', '')}")
-                    self.step_completed.emit(step, reasoning, t("messages.analyzing_in_progress"))
-                    feedback = w['continue_operation']
-                    messages.append(AIMessage("assistant", content))
-                    messages.append(AIMessage("user", feedback))
-                    messages = self.scheduler.provider.truncate_history(messages)
-
-                else:
-                    full_log.append(f"Step{step}: {t('messages.unknown_action')} {action}")
-                    self.step_completed.emit(step, reasoning, f"{t('messages.unknown_action')}: {action}")
-                    final_report = f"{t('messages.unknown_action')}: {action}"
-                    break
-            else:
-                full_log.append(t("messages.max_steps_reached"))
-                self.step_completed.emit(self.max_steps, "", t("messages.max_steps_reached"))
-                final_report = t("messages.analysis_incomplete")
-
-            self.all_done.emit(final_report, "\n".join(full_log))
+            self.log_signal.emit(f"[Chat] {t('messages.chat_completed')}")
+            self.response_ready.emit(content)
 
         except Exception as e:
             self.error.emit(str(e))
